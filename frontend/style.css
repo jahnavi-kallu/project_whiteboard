@@ -1,0 +1,164 @@
+ *{ margin:0;
+    padding:0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+    background-color: #f1f5f9;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.navbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #ffffff;
+    padding: 0 24px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    z-index: 10;
+    height: 64px;
+}
+
+.logo-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.brand-icon { font-size: 1.5rem; color: #4f46e5; }
+.logo-section h1 { font-size: 1.2rem; font-weight: 600; color: #1e293b; }
+
+.auth-sharing {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Master Layout Layout Window Grid Split */
+.app-body {
+    display: flex;
+    flex: 1;
+    height: calc(100vh - 64px);
+    position: relative;
+}
+
+/* Tool Panel Sidebar */
+.sidebar-tools {
+    width: 240px;
+    background-color: #ffffff;
+    border-right: 1px solid #e2e8f0;
+    padding: 24px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    z-index: 5;
+}
+
+.tool-section h3 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+    margin-bottom: 12px;
+}
+
+.tool-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.tool-btn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: none;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    color: #475569;
+    transition: all 0.2s;
+    text-align: left;
+}
+
+.tool-btn:hover { background-color: #f8fafc; color: #1e293b; }
+.tool-btn.active {
+    background-color: #eef2ff;
+    border-color: #6366f1;
+    color: #4f46e5;
+}
+
+.style-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.style-group label { font-size: 0.85rem; color: #475569; font-weight: 500; }
+#colorPicker {
+    width: 100%; height: 38px; border: 1px solid #e2e8f0; border-radius: 6px; cursor: pointer; background: transparent;
+}
+
+#lineWidthRange { width: 100%; cursor: pointer; accent-color: #4f46e5; }
+
+/* Global Buttons UI definitions */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.btn-primary { background-color: #4f46e5; color: white; }
+.btn-outline { background-color: white; border: 1px solid #cbd5e1; color: #334155; }
+.btn-outline:hover { background-color: #f8fafc; }
+.btn-login { background-color: #0f172a; color: white; }
+.btn-danger { background-color: #ef4444; color: white; margin-top: auto; justify-content: center; }
+.btn-danger:hover { background-color: #dc2626; }
+
+/* Canvas Area Frame */
+.canvas-container { flex: 1; background-color: #ffffff; position: relative; }
+canvas { display: block; cursor: crosshair; }
+
+/* --- Auth Modal Styling --- */
+.modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 100;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
+}
+.modal-overlay.open { opacity: 1; pointer-events: auto; }
+.modal-card {
+    background: white; padding: 32px; border-radius: 12px; width: 100%; max-width: 380px;
+    position: relative; transform: scale(0.95); transition: transform 0.2s;
+}
+.modal-overlay.open .modal-card { transform: scale(1); }
+.close-modal { position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #94a3b8; }
+.modal-tabs { display: flex; border-bottom: 2px solid #f1f5f9; margin-bottom: 20px; }
+.tab-btn { flex: 1; padding: 10px; background: none; border: none; font-size: 0.95rem; font-weight: 600; color: #94a3b8; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+.tab-btn.active { color: #4f46e5; border-bottom-color: #4f46e5; }
+.auth-form { 
+    display: none !important; 
+}
+
+.auth-form.active { 
+    display: flex !important; 
+    flex-direction: column; 
+    gap: 14px; 
+}
+.input-group { display: flex; flex-direction: column; gap: 4px; }
+.input-group label { font-size: 0.8rem; font-weight: 500; color: #475569; }
+.input-group input { padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; outline: none; }
+.input-group input:focus { border-color: #4f46e5; }
+.form-submit-btn { width: 100%; justify-content: center; padding: 10px; margin-top: 6px; }
