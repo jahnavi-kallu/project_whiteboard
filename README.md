@@ -25,8 +25,8 @@ Socket.IO
 <p>Frontend= https://whiteboardkjr.vercel.app/</p>    
 <p>Backend= https://whiteboard-kjr.onrender.com</p>
 <h3>Screenshots</h3>
-<img width="800" height="400" alt="Screenshot 2026-06-25 155623" src="https://github.com/user-attachments/assets/c81e000e-1f1e-4cf3-8ed5-5b65e9033018" />
-<img width="800" height="400" alt="Screenshot 2026-06-25 161632" src="https://github.com/user-attachments/assets/139c07fd-d20f-46cb-8d01-efe188b10be0" />
-<img width="800" height="400" alt="Screenshot 2026-06-25 161502" src="https://github.com/user-attachments/assets/b3e56f87-fe8a-4976-b7f3-de880e6f91df" />
-<img width="800" height="400" alt="Screenshot 2026-06-25 155650" src="https://github.com/user-attachments/assets/ac2f05ff-5ea0-4285-8e6d-c1985ba71e55" />
+<img width="700" height="350" alt="Screenshot 2026-06-25 155623" src="https://github.com/user-attachments/assets/c81e000e-1f1e-4cf3-8ed5-5b65e9033018" />
+<img width="700" height="350" alt="Screenshot 2026-06-25 161632" src="https://github.com/user-attachments/assets/139c07fd-d20f-46cb-8d01-efe188b10be0" />
+<img width="700" height="350" alt="Screenshot 2026-06-25 161502" src="https://github.com/user-attachments/assets/b3e56f87-fe8a-4976-b7f3-de880e6f91df" />
+<img width="700" height="350" alt="Screenshot 2026-06-25 155650" src="https://github.com/user-attachments/assets/ac2f05ff-5ea0-4285-8e6d-c1985ba71e55" />
 
