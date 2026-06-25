@@ -13,39 +13,58 @@
         <div class="logo-section">
             <i class="fa-solid fa-chalkboard brand-icon"></i>
             <h1>Whiteboard App</h1>
+            <span id="canvasTitle" class="canvas-title-badge" style="display:none;"></span>
         </div>
-        
+
         <div class="auth-sharing">
             <button id="undoBtn" class="btn btn-outline" title="Undo"><i class="fa-solid fa-rotate-left"></i></button>
             <button id="redoBtn" class="btn btn-outline" title="Redo"><i class="fa-solid fa-rotate-right"></i></button>
-            <button id="saveBtn" class="btn btn-outline" title="Save Canvas Layout"><i class="fa-solid fa-download"></i> Save Image</button>
-            
-            <button id="shareBoardBtn" class="btn btn-outline btn-share" title="Share current board"><i class="fa-solid fa-share-nodes"></i> Share</button>
-            
-            <button id="authModalBtn" class="btn btn-login"><i class="fa-solid fa-right-to-bracket"></i> Login / Register</button>
-            <button id="logoutBtn" class="btn btn-danger" style="display: none;" title="Sign Out"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
+            <!-- Opens the My Canvases drawer — hidden until logged in -->
+            <button id="myCanvasesBtn" class="btn btn-outline">
+                <i class="fa-solid fa-layer-group"></i> My Canvases
+            </button>
+            <!-- Share Canvas — hidden until logged in -->
+            <button id="shareBtn" class="btn btn-outline">
+                <i class="fa-solid fa-user-plus"></i> Share
+            </button>
+            <!-- Save split-button dropdown -->
+            <div class="save-dropdown-wrap" id="saveDropdown">
+                <button id="saveBtn" class="btn btn-outline save-main-btn">
+                    <i class="fa-solid fa-floppy-disk"></i> Save
+                    <i class="fa-solid fa-chevron-down save-chevron"></i>
+                </button>
+                <div class="save-dropdown-menu">
+                    <button id="saveCloudBtn" class="save-option">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                        <div>
+                            <div class="save-option-title">Save to My Canvases</div>
+                            <div class="save-option-sub">Stores to your account in the cloud</div>
+                        </div>
+                    </button>
+                    <button id="saveDownloadBtn" class="save-option">
+                        <i class="fa-solid fa-download"></i>
+                        <div>
+                            <div class="save-option-title">Download as PNG</div>
+                            <div class="save-option-sub">Saves a copy to your device</div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+            <button id="authModalBtn" class="btn btn-login">
+                <i class="fa-solid fa-right-to-bracket"></i> Login / Register
+            </button>
         </div>
     </header>
 
     <div class="app-body">
-        <div id="dashboardPanel" class="dashboard-panel" >
-            <div class="panel-header">
-                <h3>My Boards</h3>
-                <button id="createNewCanvasBtn" class="btn btn-primary btn-sm"><i class="fa-solid fa-plus"></i> New</button>
-            </div>
-            <ul id="canvasList" class="canvas-list">
-                <li class="empty-msg">No boards found</li>
-            </ul>
-        </div>
-
         <aside class="sidebar-tools">
             <div class="tool-section">
                 <h3>Tools</h3>
-                <button id="toolBrush" class="tool-btn active" title="Free Brush"><i class="fa-solid fa-paint-brush"></i></button>
-                <button id="toolEraser" class="tool-btn" title="Eraser"><i class="fa-solid fa-eraser"></i></button>
-                <button id="toolLine" class="tool-btn" title="Straight Line"><i class="fa-solid fa-grip-lines-vertical" style="transform: rotate(45deg);"></i></button>
-                <button id="toolRect" class="tool-btn" title="Rectangle"><i class="fa-regular fa-square"></i></button>
-                <button id="toolCircle" class="tool-btn" title="Circle"><i class="fa-regular fa-circle"></i></button>
+                <button id="toolBrush"  class="tool-btn active"><i class="fa-solid fa-paint-brush"></i> Brush</button>
+                <button id="toolEraser" class="tool-btn"><i class="fa-solid fa-eraser"></i> Eraser</button>
+                <button id="toolLine"   class="tool-btn"><i class="fa-solid fa-minus"></i> Line</button>
+                <button id="toolRect"   class="tool-btn"><i class="fa-regular fa-square"></i> Rectangle</button>
+                <button id="toolCircle" class="tool-btn"><i class="fa-regular fa-circle"></i> Circle</button>
             </div>
 
             <div class="tool-section">
@@ -55,7 +74,9 @@
                     <input type="color" id="colorPicker" value="#4f46e5">
                 </div>
                 <div class="style-group">
-                    <label for="lineWidthRange"><i class="fa-solid fa-sliders"></i> Thickness (<span id="thicknessVal">4</span>px)</label>
+                    <label for="lineWidthRange">
+                        <i class="fa-solid fa-sliders"></i> Thickness (<span id="thicknessVal">4</span>px)
+                    </label>
                     <input type="range" id="lineWidthRange" min="2" max="30" value="4">
                 </div>
             </div>
@@ -66,8 +87,27 @@
         <main class="canvas-container">
             <canvas id="whiteboard"></canvas>
         </main>
+
+        <!-- ── My Canvases Drawer ──────────────────────────────────────────────── -->
+        <div id="canvasDrawer" class="canvas-drawer">
+            <div class="drawer-header">
+                <div class="drawer-title">
+                    <i class="fa-solid fa-layer-group"></i>
+                    <span>My Canvases</span>
+                </div>
+                <button id="closeDrawerBtn" class="drawer-close-btn">&times;</button>
+            </div>
+            <button id="newCanvasBtn" class="btn btn-primary drawer-new-btn">
+                <i class="fa-solid fa-plus"></i> New Canvas
+            </button>
+            <div id="canvasList" class="canvas-list">
+                <p class="canvas-list-empty">Loading your canvases…</p>
+            </div>
+        </div>
+        <div id="drawerBackdrop" class="drawer-backdrop"></div>
     </div>
 
+    <!-- ── Auth Modal ──────────────────────────────────────────────────────────── -->
     <div class="modal-overlay" id="authModal">
         <div class="modal-card">
             <button class="close-modal" id="closeModalBtn">&times;</button>
@@ -76,42 +116,54 @@
                 <button class="tab-btn" id="tabRegister">Register</button>
             </div>
             <form id="loginForm" class="auth-form active">
-                <div class="input-group"><label>Email Address</label><input type="email" id="loginEmail" required placeholder="name@example.com"></div>
-                <div class="input-group"><label>Password</label><input type="password" id="loginPassword" required placeholder="••••••••"></div>
+                <div class="input-group">
+                    <label>Email Address</label>
+                    <input type="email" id="loginEmail" required placeholder="name@example.com">
+                </div>
+                <div class="input-group">
+                    <label>Password</label>
+                    <input type="password" id="loginPassword" required placeholder="••••••••">
+                </div>
                 <button type="submit" class="btn btn-login form-submit-btn">Sign In</button>
             </form>
             <form id="registerForm" class="auth-form">
-                <div class="input-group"><label>Full Name</label><input type="text" id="regName" required placeholder="John Doe"></div>
-                <div class="input-group"><label>Email Address</label><input type="email" id="regEmail" required placeholder="name@example.com"></div>
-                <div class="input-group"><label>Password</label><input type="password" id="regPassword" required placeholder="Minimum 6 characters"></div>
+                <div class="input-group">
+                    <label>Full Name</label>
+                    <input type="text" id="regName" required placeholder="Jane Doe">
+                </div>
+                <div class="input-group">
+                    <label>Email Address</label>
+                    <input type="email" id="regEmail" required placeholder="name@example.com">
+                </div>
+                <div class="input-group">
+                    <label>Password</label>
+                    <input type="password" id="regPassword" required placeholder="••••••••">
+                </div>
                 <button type="submit" class="btn btn-primary form-submit-btn">Create Account</button>
             </form>
         </div>
     </div>
 
+    <!-- ── Share Modal ─────────────────────────────────────────────────────────── -->
     <div class="modal-overlay" id="shareModal">
         <div class="modal-card">
             <button class="close-modal" id="closeShareModalBtn">&times;</button>
-            <div class="modal-header">
-                <h2>Share Project Canvas</h2>
+            <h2 style="margin-bottom:8px; font-size:1.1rem; color:#1e293b;">Share Canvas</h2>
+            <p style="font-size:0.85rem; color:#64748b; margin-bottom:20px;">
+                Enter the email of the person you want to collaborate with.
+            </p>
+            <div class="input-group" style="margin-bottom:16px;">
+                <label>Collaborator Email</label>
+                <input type="email" id="shareEmail" placeholder="colleague@example.com">
             </div>
-            <div class="modal-body" style="margin-top: 15px;">
-                <p style="font-size: 14px; color: #666;">Give others access to collaborate live on this frame:</p>
-                <div class="share-input-group" style="display: flex; gap: 10px; margin: 10px 0 20px 0;">
-                    <input type="email" id="shareEmailInput" placeholder="Enter collaborator's email" style="flex-grow: 1; padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px;">
-                    <button id="submitShareBtn" class="btn btn-primary" style="padding: 8px 16px;">Invite</button>
-                </div>
-                <hr style="border: 0; border-top: 1px solid #eee; margin-bottom: 15px;">
-                <p style="font-size: 14px; color: #666;">Or copy the direct workspace transmission link:</p>
-                <div class="share-link-group" style="display: flex; gap: 10px; margin-top: 10px;">
-                    <input type="text" id="shareUrlLink" readonly style="flex-grow: 1; padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px; background: #f5f5f5;">
-                    <button id="copyLinkBtn" class="btn btn-outline" style="padding: 8px 12px;"><i class="fa-regular fa-copy"></i> Copy</button>
-                </div>
-            </div>
+            <button id="shareSubmitBtn" class="btn btn-primary form-submit-btn">
+                <i class="fa-solid fa-paper-plane"></i> Send Invite
+            </button>
+            <p id="shareMsg" style="margin-top:12px; font-size:0.85rem; text-align:center;"></p>
         </div>
     </div>
 
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="http://localhost:5000/socket.io/socket.io.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

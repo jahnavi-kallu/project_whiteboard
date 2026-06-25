@@ -2,132 +2,149 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 require("dotenv").config();
+console.log("MONGO_URI =", process.env.MONGO_URI);
 const connectToDB = require('./config/db');
 const { Server } = require("socket.io");
 const http = require("http");
 const Canvas = require("./models/canvasModel");
 const jwt = require("jsonwebtoken");
-const SECRET_KEY = "your_secret_key";
+
+const SECRET_KEY = process.env.JWT_SECRET || "your_secret_key";
 
 const userRoutes = require("./routes/userRoutes");
 const canvasRoutes = require("./routes/canvasRoutes");
 
 const app = express();
 
-// === 1. MIDDLEWARE MATRIX ALWAYS GOES FIRST ===
+const ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+    "http://127.0.0.1:5501"
+];
+
+// === MIDDLEWARE ===
 app.use(cors({
-    origin: [
-        "http://localhost:3000", 
-        "http://localhost:5500", 
-        "http://127.0.0.1:5501",
-        "http://127.0.0.1:5500"
-    ],
+    origin: ALLOWED_ORIGINS,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true
 }));
-app.use(express.json());
 
-// === 2. ROUTE REGISTRATIONS COMPILATION ===
+// Increase JSON limit to 10mb to handle canvas dataUrl payloads
+app.use(express.json({ limit: "10mb" }));
+
+// === ROUTES ===
 app.use("/api/users", userRoutes);
-app.use("/api/canvas", canvasRoutes); // Placed perfectly below JSON and CORS setups
+app.use("/api/canvas", canvasRoutes);
 
-// Database connection initializer
+// === DATABASE ===
 connectToDB();
 
+// === SOCKET.IO SERVER ===
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-      origin: [
-        "http://localhost:3000", 
-        "http://localhost:5500", 
-        "http://127.0.0.1:5501",
-        "http://127.0.0.1:5500"
-      ], 
-      methods: ["GET", "POST"],
+        origin: ALLOWED_ORIGINS,
+        methods: ["GET", "POST"]
     },
+    // Allow large dataUrl payloads over socket too
+    maxHttpBufferSize: 10 * 1024 * 1024
 });
 
-let canvasData = {};
+// In-memory cache: canvasId -> latest dataUrl
+// Lets newly joined users get the current state instantly without a DB read
+let canvasCache = {};
 
 io.on("connection", (socket) => {
-    console.log("A user connected:", socket.id);
-  
+    console.log("User connected:", socket.id);
+
+    // ── joinCanvas ──────────────────────────────────────────────────────────────
     socket.on("joinCanvas", async ({ canvasId }) => {
-        console.log("Joining canvas room state:", canvasId);
         try {
-            // 1. Safe default fallback room bypass
+            // Allow unauthenticated users into a demo room
             if (canvasId === "default-canvas") {
                 socket.join(canvasId);
-                console.log(`User ${socket.id} joined test room: ${canvasId}`);
-                
-                if (canvasData[canvasId]) {
-                    socket.emit("loadCanvas", canvasData[canvasId]);
-                } else {
-                    socket.emit("loadCanvas", ""); 
-                }
-                return; 
+                socket.emit("loadCanvas", canvasCache[canvasId] || "");
+                return;
             }
 
-            // 2. Verified JWT Authorization verification routing block
+            // Verify JWT from socket handshake
             const authHeader = socket.handshake.headers.authorization;
             if (!authHeader || !authHeader.startsWith("Bearer ")) {
-                console.log("No authorization token parsed on socket handshake connection.");
-                setTimeout(() => {
-                    socket.emit("unauthorized", { message: "Access Denied: No Token" });
-                }, 100);
+                socket.emit("unauthorized", { message: "Access Denied: No token provided" });
                 return;
             }
 
-            const token = authHeader.split(" ")[1];
-            const decoded = jwt.verify(token, SECRET_KEY);
-            const userId = decoded.userId;
+            let userId;
+            try {
+                const token = authHeader.split(" ")[1];
+                const decoded = jwt.verify(token, SECRET_KEY);
+                userId = decoded.userId;
+            } catch (err) {
+                socket.emit("unauthorized", { message: "Invalid or expired token" });
+                return;
+            }
 
             if (!mongoose.Types.ObjectId.isValid(canvasId)) {
-                socket.emit("error", { message: "Invalid Canvas ID format." });
+                socket.emit("error", { message: "Invalid canvas ID" });
                 return;
             }
 
+            // Null-check canvas BEFORE accessing its properties
             const canvas = await Canvas.findById(canvasId);
-            
-            // Unified safety check across your canvas workspace collection definitions
-            const isOwner = String(canvas.owner) === String(userId);
-            const isShared = (canvas.sharedUsers && canvas.sharedUsers.includes(userId)) || (canvas.shared && canvas.shared.includes(userId));
+            if (!canvas) {
+                socket.emit("error", { message: "Canvas not found" });
+                return;
+            }
 
-            if (!canvas || (!isOwner && !isShared)) {
-                console.log("Unauthorized access rejection fired.");
-                setTimeout(() => {
-                    socket.emit("unauthorized", { message: "You are not authorized to join this canvas." });
-                }, 100);
+            const isOwner = String(canvas.owner) === String(userId);
+            // Model uses canvas.shared (fixed — removed stale sharedUsers reference)
+            const isShared = canvas.shared && canvas.shared.some(id => String(id) === String(userId));
+
+            if (!isOwner && !isShared) {
+                socket.emit("unauthorized", { message: "You are not authorized to join this canvas" });
                 return;
             }
 
             socket.join(canvasId);
-            if (canvasData[canvasId]) {
-                socket.emit("loadCanvas", canvasData[canvasId]);
-            } else {
-                socket.emit("loadCanvas", canvas.elements);
-            }
+            console.log(`User ${socket.id} joined canvas: ${canvasId}`);
+
+            // Send cached state if available, else load from DB
+            const stateToSend = canvasCache[canvasId] || canvas.dataUrl || "";
+            socket.emit("loadCanvas", stateToSend);
+
         } catch (error) {
-            console.error("Socket room join error:", error);
-            socket.emit("error", { message: "An error occurred while joining the canvas." });
+            console.error("joinCanvas error:", error);
+            socket.emit("error", { message: "An error occurred while joining the canvas" });
         }
     });
 
-    // Real-Time Socket Pipe distribution layers
-    socket.on("drawingUpdate", async ({ canvasId, elements }) => {
+    // ── drawingUpdate ───────────────────────────────────────────────────────────
+    // Receives a dataUrl from the drawing client, broadcasts to room, persists to DB
+    socket.on("drawingUpdate", async ({ canvasId, dataUrl }) => {
         try {
-            canvasData[canvasId] = elements;
-            socket.to(canvasId).emit("receiveDrawingUpdate", elements);
-    
-            if (mongoose.Types.ObjectId.isValid(canvasId)) {
-                await Canvas.findByIdAndUpdate(canvasId, { elements }, { new: true, useFindAndModify: false });
+            if (!dataUrl || !canvasId) return;
+
+            // Update in-memory cache for fast delivery to new joiners
+            canvasCache[canvasId] = dataUrl;
+
+            // Broadcast to everyone else in the room (not the sender)
+            socket.to(canvasId).emit("receiveDrawingUpdate", dataUrl);
+
+            // Persist to DB (only for real canvas IDs, not the demo room)
+            if (canvasId !== "default-canvas" && mongoose.Types.ObjectId.isValid(canvasId)) {
+                await Canvas.findByIdAndUpdate(
+                    canvasId,
+                    { dataUrl, updatedAt: new Date() },
+                    { new: true }
+                );
             }
         } catch (error) {
-            console.error("Drawing update save error:", error);
+            console.error("drawingUpdate error:", error);
         }
     });
-    
+
     socket.on("disconnect", () => {
         console.log("User disconnected:", socket.id);
     });

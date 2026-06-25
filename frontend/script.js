@@ -1,443 +1,527 @@
 const API_BASE_URL = 'http://localhost:5000/api';
-const canvas = document.getElementById('whiteboard');
-const ctx = canvas.getContext('2d');
 
-// UI Controls
-const colorPicker = document.getElementById('colorPicker');
+// ─── Selectors ─────────────────────────────────────────────────────────────────
+const canvas         = document.getElementById('whiteboard');
+const ctx            = canvas.getContext('2d');
+const colorPicker    = document.getElementById('colorPicker');
 const lineWidthRange = document.getElementById('lineWidthRange');
-const thicknessVal = document.getElementById('thicknessVal');
-const clearBtn = document.getElementById('clearBtn');
-const saveBtn = document.getElementById('saveBtn');
-const undoBtn = document.getElementById('undoBtn');
-const redoBtn = document.getElementById('redoBtn');
+const thicknessVal   = document.getElementById('thicknessVal');
+const clearBtn       = document.getElementById('clearBtn');
+const saveBtn        = document.getElementById('saveBtn');
+const saveDropdown   = document.getElementById('saveDropdown');
+const saveCloudBtn   = document.getElementById('saveCloudBtn');
+const saveDownloadBtn= document.getElementById('saveDownloadBtn');
+const undoBtn        = document.getElementById('undoBtn');
+const redoBtn        = document.getElementById('redoBtn');
+const canvasTitleEl  = document.getElementById('canvasTitle');
+const authModalBtn   = document.getElementById('authModalBtn');
+const toolBrush      = document.getElementById('toolBrush');
+const toolEraser     = document.getElementById('toolEraser');
+const toolLine       = document.getElementById('toolLine');
+const toolRect       = document.getElementById('toolRect');
+const toolCircle     = document.getElementById('toolCircle');
+const myCanvasesBtn  = document.getElementById('myCanvasesBtn');
+const canvasDrawer   = document.getElementById('canvasDrawer');
+const drawerBackdrop = document.getElementById('drawerBackdrop');
+const closeDrawerBtn = document.getElementById('closeDrawerBtn');
+const newCanvasBtn   = document.getElementById('newCanvasBtn');
+const canvasList     = document.getElementById('canvasList');
+const shareBtn       = document.getElementById('shareBtn');
+const shareModal     = document.getElementById('shareModal');
+const closeShareBtn  = document.getElementById('closeShareModalBtn');
+const shareEmail     = document.getElementById('shareEmail');
+const shareSubmitBtn = document.getElementById('shareSubmitBtn');
+const shareMsg       = document.getElementById('shareMsg');
+const authModal      = document.getElementById('authModal');
+const closeModalBtn  = document.getElementById('closeModalBtn');
+const tabLogin       = document.getElementById('tabLogin');
+const tabRegister    = document.getElementById('tabRegister');
+const loginForm      = document.getElementById('loginForm');
+const registerForm   = document.getElementById('registerForm');
 
-// Tool Buttons
-const toolBrush = document.getElementById('toolBrush');
-const toolEraser = document.getElementById('toolEraser');
-const toolLine = document.getElementById('toolLine');
-const toolRect = document.getElementById('toolRect');
-const toolCircle = document.getElementById('toolCircle');
-
-// State
-let currentTool = 'brush';
-let isDrawing = false;
-let startX = 0;
-let startY = 0;
-let historyStack = [];
-let redoStack = [];
-
-// Active canvas tracking (set after login or canvas selection)
+// ─── State ─────────────────────────────────────────────────────────────────────
+let currentTool    = 'brush';
+let isDrawing      = false;
+let startX = 0, startY = 0;
+let historyStack   = [];
+let redoStack      = [];
 let activeCanvasId = null;
+let socket         = null;
 
-// ─── Canvas Context ────────────────────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+const getToken = () => localStorage.getItem('token');
 
-function initCanvasContext() {
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
+function syncCanvasId() {
+    if (!activeCanvasId) activeCanvasId = localStorage.getItem('activeCanvasId');
 }
 
-function saveCanvasState() {
-    historyStack.push(canvas.toDataURL());
-    redoStack = [];
+function setCanvasTitle(title) {
+    canvasTitleEl.textContent   = title || '';
+    canvasTitleEl.style.display = title ? 'inline-block' : 'none';
 }
+
+function resetSaveBtn() {
+    saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save <i class="fa-solid fa-chevron-down save-chevron"></i>';
+    saveBtn.disabled  = false;
+}
+
+async function apiFetch(path, options = {}) {
+    return fetch(`${API_BASE_URL}${path}`, {
+        ...options,
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}`, ...options.headers }
+    });
+}
+
+// ─── Canvas ────────────────────────────────────────────────────────────────────
+function initCtx() { ctx.lineJoin = ctx.lineCap = 'round'; }
 
 function resizeCanvas() {
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = canvas.width;
-    tempCanvas.height = canvas.height;
-    const tempCtx = tempCanvas.getContext('2d');
-    tempCtx.drawImage(canvas, 0, 0);
-
-    canvas.width = canvas.parentElement.clientWidth;
+    const tmp = document.createElement('canvas');
+    tmp.width = canvas.width; tmp.height = canvas.height;
+    tmp.getContext('2d').drawImage(canvas, 0, 0);
+    canvas.width  = canvas.parentElement.clientWidth;
     canvas.height = canvas.parentElement.clientHeight;
-
-    initCanvasContext();
-    ctx.drawImage(tempCanvas, 0, 0);
+    initCtx(); ctx.drawImage(tmp, 0, 0);
 }
 
 function restoreState(dataUrl) {
     if (!dataUrl) return;
     const img = new Image();
+    img.onload = () => { ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(img, 0, 0); };
     img.src = dataUrl;
-    img.onload = () => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0);
-    };
 }
 
-// ─── Drawing ───────────────────────────────────────────────────────────────────
+function pushHistory() { historyStack.push(canvas.toDataURL()); redoStack = []; }
 
+// ─── Drawing ───────────────────────────────────────────────────────────────────
 function getCoords(e) {
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const rect = canvas.getBoundingClientRect();
-    return { x: clientX - rect.left, y: clientY - rect.top };
+    const r = canvas.getBoundingClientRect();
+    const s = e.touches ? e.touches[0] : e;
+    return { x: s.clientX - r.left, y: s.clientY - r.top };
 }
 
 function startDrawing(e) {
     isDrawing = true;
-    const coords = getCoords(e);
-    startX = coords.x;
-    startY = coords.y;
-    saveCanvasState();
+    ({ x: startX, y: startY } = getCoords(e));
+    pushHistory();
 }
 
 function draw(e) {
     if (!isDrawing) return;
     e.preventDefault();
+    const { x: cx, y: cy } = getCoords(e);
+    ctx.lineWidth    = lineWidthRange.value;
+    ctx.strokeStyle  = currentTool === 'eraser' ? '#ffffff' : colorPicker.value;
 
-    const { x: currentX, y: currentY } = getCoords(e);
-    const thickness = lineWidthRange.value;
-    const activeColor = colorPicker.value;
-
-    if (['line', 'rect', 'circle'].includes(currentTool)) {
+    if (['line', 'rect', 'circle'].includes(currentTool))
         restoreState(historyStack[historyStack.length - 1]);
-    }
 
-    ctx.lineWidth = thickness;
-
-    if (currentTool === 'eraser') {
-        ctx.strokeStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.moveTo(startX, startY);
-        ctx.lineTo(currentX, currentY);
-        ctx.stroke();
-        startX = currentX; startY = currentY;
-    } else if (currentTool === 'brush') {
-        ctx.strokeStyle = activeColor;
-        ctx.beginPath();
-        ctx.moveTo(startX, startY);
-        ctx.lineTo(currentX, currentY);
-        ctx.stroke();
-        startX = currentX; startY = currentY;
+    ctx.beginPath();
+    if (currentTool === 'brush' || currentTool === 'eraser') {
+        ctx.moveTo(startX, startY); ctx.lineTo(cx, cy); ctx.stroke();
+        startX = cx; startY = cy;
     } else if (currentTool === 'line') {
-        setTimeout(() => {
-            ctx.strokeStyle = activeColor;
-            ctx.beginPath();
-            ctx.moveTo(startX, startY);
-            ctx.lineTo(currentX, currentY);
-            ctx.stroke();
-        }, 0);
+        ctx.moveTo(startX, startY); ctx.lineTo(cx, cy); ctx.stroke();
     } else if (currentTool === 'rect') {
-        setTimeout(() => {
-            ctx.strokeStyle = activeColor;
-            ctx.beginPath();
-            ctx.rect(startX, startY, currentX - startX, currentY - startY);
-            ctx.stroke();
-        }, 0);
+        ctx.rect(startX, startY, cx - startX, cy - startY); ctx.stroke();
     } else if (currentTool === 'circle') {
-        setTimeout(() => {
-            ctx.strokeStyle = activeColor;
-            ctx.beginPath();
-            const radius = Math.sqrt(Math.pow(currentX - startX, 2) + Math.pow(currentY - startY, 2));
-            ctx.arc(startX, startY, radius, 0, 2 * Math.PI);
-            ctx.stroke();
-        }, 0);
+        ctx.arc(startX, startY, Math.hypot(cx - startX, cy - startY), 0, 2 * Math.PI); ctx.stroke();
     }
 }
 
 function stopDrawing() {
-    isDrawing = false;
-    ctx.beginPath();
+    if (!isDrawing) return;
+    isDrawing = false; ctx.beginPath();
+    if (socket && activeCanvasId)
+        socket.emit('drawingUpdate', { canvasId: activeCanvasId, dataUrl: canvas.toDataURL() });
 }
 
 // ─── Tools ─────────────────────────────────────────────────────────────────────
-
-const tools = [
-    { node: toolBrush, name: 'brush' },
-    { node: toolEraser, name: 'eraser' },
-    { node: toolLine, name: 'line' },
-    { node: toolRect, name: 'rect' },
-    { node: toolCircle, name: 'circle' }
-];
-
-tools.forEach(t => {
+[{ node: toolBrush, name: 'brush' }, { node: toolEraser, name: 'eraser' },
+ { node: toolLine,  name: 'line'  }, { node: toolRect,   name: 'rect'   },
+ { node: toolCircle,name: 'circle'}].forEach(t => {
     t.node.addEventListener('click', () => {
-        tools.forEach(o => o.node.classList.remove('active'));
+        document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
         t.node.classList.add('active');
         currentTool = t.name;
     });
 });
 
-lineWidthRange.addEventListener('input', (e) => {
-    thicknessVal.textContent = e.target.value;
-});
+lineWidthRange.addEventListener('input', e => { thicknessVal.textContent = e.target.value; });
 
 clearBtn.addEventListener('click', () => {
-    if (confirm('Clear the entire whiteboard?')) {
-        saveCanvasState();
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
+    if (!confirm('Clear the whiteboard?')) return;
+    pushHistory();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (socket && activeCanvasId)
+        socket.emit('drawingUpdate', { canvasId: activeCanvasId, dataUrl: canvas.toDataURL() });
 });
 
-// ─── Undo / Redo ───────────────────────────────────────────────────────────────
-
 undoBtn.addEventListener('click', () => {
-    if (historyStack.length > 0) {
-        redoStack.push(canvas.toDataURL());
-        historyStack.pop();
-        if (historyStack.length === 0) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-        } else {
-            restoreState(historyStack[historyStack.length - 1]);
-        }
-    }
+    if (!historyStack.length) return;
+    redoStack.push(canvas.toDataURL()); historyStack.pop();
+    historyStack.length ? restoreState(historyStack[historyStack.length - 1])
+                        : ctx.clearRect(0, 0, canvas.width, canvas.height);
 });
 
 redoBtn.addEventListener('click', () => {
-    if (redoStack.length > 0) {
-        const nextState = redoStack.pop();
-        historyStack.push(nextState);
-        restoreState(nextState);
-    }
+    if (!redoStack.length) return;
+    const s = redoStack.pop(); historyStack.push(s); restoreState(s);
 });
 
 // ─── Save ──────────────────────────────────────────────────────────────────────
-// Save locally always; also persist to backend if logged in
+saveBtn.addEventListener('click', e => { e.stopPropagation(); saveDropdown.classList.toggle('open'); });
+document.addEventListener('click', () => saveDropdown.classList.remove('open'));
 
-saveBtn.addEventListener('click', async () => {
-    // 1. Always allow local PNG download
-    const link = document.createElement('a');
-    link.download = `whiteboard-${Date.now()}.png`;
-    link.href = canvas.toDataURL();
-    link.click();
+saveDownloadBtn.addEventListener('click', () => {
+    saveDropdown.classList.remove('open');
+    const a = document.createElement('a');
+    a.download = `whiteboard-${Date.now()}.png`;
+    a.href = canvas.toDataURL(); a.click();
+});
 
-    // 2. If logged in, also save to the backend
-    const token = localStorage.getItem('token');
-    if (!token || !activeCanvasId) return;
+saveCloudBtn.addEventListener('click', async () => {
+    saveDropdown.classList.remove('open');
+    if (!getToken()) { alert('Please log in first.'); return; }
+
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
 
     try {
-        const response = await fetch(`${API_BASE_URL}/canvas/update`, {
+        // Step 1: get a valid activeCanvasId by any means
+        syncCanvasId();
+        console.log('[Save] activeCanvasId after sync:', activeCanvasId);
+
+        if (!activeCanvasId) {
+            console.log('[Save] No ID found, fetching list...');
+            const listRes  = await apiFetch('/canvas/list');
+            const listData = await listRes.json();
+            console.log('[Save] List response:', listRes.status, listData);
+
+            if (listRes.ok && Array.isArray(listData) && listData.length > 0) {
+                activeCanvasId = String(listData[0]._id);
+                localStorage.setItem('activeCanvasId', activeCanvasId);
+                console.log('[Save] Using existing canvas:', activeCanvasId);
+            } else {
+                console.log('[Save] No canvases, creating new one...');
+                await createCanvas();
+                console.log('[Save] Created canvas:', activeCanvasId);
+            }
+        }
+
+        if (!activeCanvasId) {
+            alert('Could not get a canvas ID. Please refresh and try again.');
+            resetSaveBtn(); return;
+        }
+
+        // Step 2: save
+        console.log('[Save] Saving to canvasId:', activeCanvasId);
+        const res  = await apiFetch('/canvas/update', {
             method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
             body: JSON.stringify({ canvasId: activeCanvasId, dataUrl: canvas.toDataURL() })
         });
-        const data = await response.json();
-        if (!response.ok) {
-            console.error('Cloud save failed:', data.message);
+        const data = await res.json();
+        console.log('[Save] Update response:', res.status, data);
+
+        if (res.ok) {
+            saveBtn.innerHTML = '<i class="fa-solid fa-check"></i> Saved!';
+            setTimeout(resetSaveBtn, 2000);
+            if (canvasDrawer.classList.contains('open')) renderCanvasList();
+        } else if (res.status === 404) {
+            // Canvas deleted — create fresh and retry once
+            console.log('[Save] Canvas not found, creating new and retrying...');
+            localStorage.removeItem('activeCanvasId'); activeCanvasId = null;
+            await createCanvas();
+            await apiFetch('/canvas/update', {
+                method: 'PUT',
+                body: JSON.stringify({ canvasId: activeCanvasId, dataUrl: canvas.toDataURL() })
+            });
+            saveBtn.innerHTML = '<i class="fa-solid fa-check"></i> Saved!';
+            setTimeout(resetSaveBtn, 2000);
+        } else if (res.status === 401) {
+            alert('Session expired. Please log out and log in again.');
+            resetSaveBtn();
+        } else {
+            alert('Save failed: ' + (data.message || res.status));
+            resetSaveBtn();
         }
     } catch (err) {
-        console.error('Cloud save error:', err);
+        console.error('[Save] Exception:', err);
+        alert('Error: ' + err.message);
+        resetSaveBtn();
     }
 });
 
-// ─── Canvas Pointer Events ─────────────────────────────────────────────────────
+// ─── Socket ────────────────────────────────────────────────────────────────────
+function connectSocket(token, canvasId) {
+    if (socket) socket.disconnect();
+    socket = io('http://localhost:5000', { extraHeaders: { Authorization: `Bearer ${token}` } });
+    socket.on('connect',              () => socket.emit('joinCanvas', { canvasId }));
+    socket.on('loadCanvas',           dataUrl => { if (dataUrl) restoreState(dataUrl); });
+    socket.on('receiveDrawingUpdate', dataUrl => restoreState(dataUrl));
+    socket.on('unauthorized',         d => console.warn('Socket:', d.message));
+}
 
-canvas.addEventListener('mousedown', startDrawing);
-canvas.addEventListener('mousemove', draw);
-canvas.addEventListener('mouseup', stopDrawing);
-canvas.addEventListener('mouseout', stopDrawing);
-canvas.addEventListener('touchstart', startDrawing);
-canvas.addEventListener('touchmove', draw, { passive: false });
-canvas.addEventListener('touchend', stopDrawing);
-window.addEventListener('resize', resizeCanvas);
+// ─── Canvas API ────────────────────────────────────────────────────────────────
+async function createCanvas(title) {
+    const res  = await apiFetch('/canvas/create', {
+        method: 'POST',
+        body: JSON.stringify({ title: title || `Canvas ${new Date().toLocaleDateString()}` })
+    });
+    const data = await res.json();
+    console.log('[createCanvas] response:', res.status, data);
+    if (res.ok) {
+        // Backend returns _id (MongoDB), aliased as id in the response — handle both
+        activeCanvasId = String(data.canvas.id || data.canvas._id);
+        localStorage.setItem('activeCanvasId', activeCanvasId);
+        setCanvasTitle(data.canvas.title);
+        connectSocket(getToken(), activeCanvasId);
+        console.log('[createCanvas] set activeCanvasId:', activeCanvasId);
+    } else {
+        console.error('[createCanvas] failed:', data);
+    }
+    return res.ok ? activeCanvasId : null;
+}
 
-// ─── Auth Modal ────────────────────────────────────────────────────────────────
+async function loadCanvas(id) {
+    const res  = await apiFetch('/canvas/load/' + id);
+    const data = await res.json();
+    if (res.ok) {
+        activeCanvasId = String(id);
+        localStorage.setItem('activeCanvasId', activeCanvasId);
+        if (data.dataUrl) restoreState(data.dataUrl);
+        setCanvasTitle(data.title || 'Untitled Canvas');
+        connectSocket(getToken(), activeCanvasId);
+        console.log('[loadCanvas] loaded:', activeCanvasId);
+    } else {
+        console.warn('[loadCanvas] failed to load', id, data.message, '— creating new canvas');
+        localStorage.removeItem('activeCanvasId');
+        activeCanvasId = null;
+        await createCanvas();
+    }
+}
 
-const authModalBtn = document.getElementById('authModalBtn');
-const authModal = document.getElementById('authModal');
-const closeModalBtn = document.getElementById('closeModalBtn');
-const tabLogin = document.getElementById('tabLogin');
-const tabRegister = document.getElementById('tabRegister');
-const loginForm = document.getElementById('loginForm');
-const registerForm = document.getElementById('registerForm');
+async function applyLoggedInState(name, token) {
+    authModalBtn.innerHTML = '<i class="fa-solid fa-user"></i> Hi, ' + name + ' &nbsp;·&nbsp; <small>Logout</small>';
+    try {
+        const listRes  = await apiFetch('/canvas/list');
+        const list     = await listRes.json();
+        console.log('[applyLoggedInState] list:', listRes.status, list);
 
-function closeModal() { authModal.classList.remove('open'); }
-
-closeModalBtn.addEventListener('click', closeModal);
-authModal.addEventListener('click', (e) => { if (e.target === authModal) closeModal(); });
-
-// If already logged in, clicking the button logs out instead of opening the modal
-authModalBtn.addEventListener('click', () => {
-    const token = localStorage.getItem('token');
-    if (token) {
-        if (confirm('Log out?')) {
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
+        if (listRes.ok && Array.isArray(list) && list.length > 0) {
+            const savedId = localStorage.getItem('activeCanvasId');
+            const match   = list.find(c => String(c._id) === String(savedId));
+            const target  = match ? match._id : list[0]._id;
+            console.log('[applyLoggedInState] loading canvas:', target);
+            await loadCanvas(target);
+        } else {
+            console.log('[applyLoggedInState] no canvases, creating new');
+            localStorage.removeItem('activeCanvasId');
             activeCanvasId = null;
-            authModalBtn.innerHTML = `<i class="fa-solid fa-right-to-bracket"></i> Login / Register`;
+            await createCanvas();
         }
+    } catch(err) {
+        console.error('[applyLoggedInState] error:', err);
+        localStorage.removeItem('activeCanvasId');
+        activeCanvasId = null;
+        await createCanvas();
+    }
+    console.log('[applyLoggedInState] done. activeCanvasId:', activeCanvasId, 'localStorage:', localStorage.getItem('activeCanvasId'));
+}
+
+// ─── My Canvases Drawer ────────────────────────────────────────────────────────
+function openDrawer()  { canvasDrawer.classList.add('open'); drawerBackdrop.classList.add('open'); renderCanvasList(); }
+function closeDrawer() { canvasDrawer.classList.remove('open'); drawerBackdrop.classList.remove('open'); }
+
+myCanvasesBtn.addEventListener('click',  openDrawer);
+closeDrawerBtn.addEventListener('click', closeDrawer);
+drawerBackdrop.addEventListener('click', closeDrawer);
+
+newCanvasBtn.addEventListener('click', async () => {
+    closeDrawer();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    historyStack = []; redoStack = [];
+    await createCanvas();
+});
+
+async function renderCanvasList() {
+    canvasList.innerHTML = '<p class="canvas-list-empty">Loading…</p>';
+    const res  = await apiFetch('/canvas/list');
+    const list = await res.json();
+    if (!res.ok || !list.length) {
+        canvasList.innerHTML = '<p class="canvas-list-empty">No canvases yet. Create one above!</p>';
+        return;
+    }
+
+    const userId = JSON.parse(localStorage.getItem('user'))?.id;
+    canvasList.innerHTML = '';
+
+    // Bulk delete button if many empty canvases
+    const empties = list.filter(c => !c.title || c.title.startsWith('Canvas ') || c.title === 'Untitled Canvas');
+    if (empties.length > 2) {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-danger';
+        btn.style.cssText = 'width:100%;justify-content:center;margin-bottom:10px;font-size:0.8rem;padding:7px;';
+        btn.innerHTML = '<i class="fa-solid fa-broom"></i> Delete All Empty Canvases';
+        btn.onclick = () => bulkDeleteEmpty(list, userId);
+        canvasList.appendChild(btn);
+    }
+
+    list.forEach(c => {
+        const isOwner = String(c.owner) === String(userId);
+        const isActive= String(c._id)   === String(activeCanvasId);
+        const date    = new Date(c.updatedAt || c.createdAt).toLocaleDateString();
+        const el      = document.createElement('div');
+        el.className  = `canvas-item${isActive ? ' active-canvas' : ''}`;
+        el.innerHTML  = `
+            <div class="canvas-item-info">
+                <div class="canvas-item-title">${c.title || 'Untitled Canvas'}</div>
+                <div class="canvas-item-meta">${date}</div>
+            </div>
+            <span class="canvas-item-badge ${isOwner ? 'badge-owned' : 'badge-shared'}">${isOwner ? 'Mine' : 'Shared'}</span>
+            ${isOwner ? '<button class="canvas-item-delete" title="Delete"><i class="fa-solid fa-trash-can"></i></button>' : ''}`;
+
+        el.addEventListener('click', async e => {
+            if (e.target.closest('.canvas-item-delete')) return;
+            closeDrawer();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            historyStack = []; redoStack = [];
+            await loadCanvas(c._id);
+        });
+
+        const del = el.querySelector('.canvas-item-delete');
+        if (del) del.addEventListener('click', async e => {
+            e.stopPropagation();
+            if (!confirm('Delete this canvas permanently?')) return;
+            const r = await apiFetch(`/canvas/delete/${c._id}`, { method: 'DELETE' });
+            if (r.ok) {
+                if (String(c._id) === String(activeCanvasId)) {
+                    activeCanvasId = null; localStorage.removeItem('activeCanvasId');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    setCanvasTitle(''); await createCanvas();
+                }
+                renderCanvasList();
+            }
+        });
+        canvasList.appendChild(el);
+    });
+}
+
+async function bulkDeleteEmpty(list, userId) {
+    if (!confirm('Delete all empty untitled canvases? Your active canvas is kept.')) return;
+    const targets = list.filter(c => {
+        const mine   = String(c.owner) === String(userId);
+        const empty  = !c.title || c.title.startsWith('Canvas ') || c.title === 'Untitled Canvas';
+        const active = String(c._id) === String(activeCanvasId);
+        return mine && empty && !active;
+    });
+    await Promise.all(targets.map(c => apiFetch(`/canvas/delete/${c._id}`, { method: 'DELETE' })));
+    renderCanvasList();
+}
+
+// ─── Share ─────────────────────────────────────────────────────────────────────
+shareBtn.addEventListener('click', () => {
+    if (!getToken()) { authModal.classList.add('open'); return; }
+    shareMsg.textContent = ''; shareEmail.value = '';
+    shareModal.classList.add('open');
+});
+closeShareBtn.addEventListener('click', () => shareModal.classList.remove('open'));
+shareModal.addEventListener('click', e => { if (e.target === shareModal) shareModal.classList.remove('open'); });
+
+shareSubmitBtn.addEventListener('click', async () => {
+    const email = shareEmail.value.trim();
+    if (!email) { shareMsg.style.color = '#ef4444'; shareMsg.textContent = 'Enter an email.'; return; }
+    syncCanvasId();
+    if (!activeCanvasId) { shareMsg.style.color = '#ef4444'; shareMsg.textContent = 'No active canvas.'; return; }
+    shareSubmitBtn.disabled = true;
+    shareMsg.style.color = '#64748b'; shareMsg.textContent = 'Sending…';
+    const res  = await apiFetch(`/canvas/share/${activeCanvasId}`, { method: 'PUT', body: JSON.stringify({ email }) });
+    const data = await res.json();
+    shareMsg.style.color = res.ok ? '#16a34a' : '#ef4444';
+    shareMsg.textContent = data.message;
+    if (res.ok) shareEmail.value = '';
+    shareSubmitBtn.disabled = false;
+});
+
+// ─── Auth ──────────────────────────────────────────────────────────────────────
+function closeModal() { authModal.classList.remove('open'); }
+closeModalBtn.addEventListener('click', closeModal);
+authModal.addEventListener('click', e => { if (e.target === authModal) closeModal(); });
+
+authModalBtn.addEventListener('click', () => {
+    if (getToken()) {
+        if (!confirm('Log out?')) return;
+        ['token','user','activeCanvasId'].forEach(k => localStorage.removeItem(k));
+        activeCanvasId = null;
+        if (socket) { socket.disconnect(); socket = null; }
+        setCanvasTitle('');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        authModalBtn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Login / Register';
     } else {
         authModal.classList.add('open');
     }
 });
 
 tabLogin.addEventListener('click', () => {
-    tabLogin.classList.add('active');
-    tabRegister.classList.remove('active');
-    loginForm.classList.add('active');
-    registerForm.classList.remove('active');
+    tabLogin.classList.add('active'); tabRegister.classList.remove('active');
+    loginForm.classList.add('active'); registerForm.classList.remove('active');
 });
-
 tabRegister.addEventListener('click', () => {
-    tabRegister.classList.add('active');
-    tabLogin.classList.remove('active');
-    registerForm.classList.add('active');
-    loginForm.classList.remove('active');
+    tabRegister.classList.add('active'); tabLogin.classList.remove('active');
+    registerForm.classList.add('active'); loginForm.classList.remove('active');
 });
 
-// ─── API Helpers ───────────────────────────────────────────────────────────────
-
-// Creates a new blank canvas on the backend and sets it as active
-// --- Inside script.js ---
-async function createNewCanvas() {
-    const token = localStorage.getItem('token');
-    if (!token) {
-        alert("You must be logged in to create a canvas.");
-        return;
-    }
-
-    try {
-        const response = await fetch(`${API_BASE_URL}/canvas/create`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                name: "Untitled Canvas",
-                elements: []
-            })
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-            console.log("Canvas creation response data:", data);
-
-            const canvasId = data.canvasId || data._id || data.id || (data.canvas && (data.canvas._id || data.canvas.id));
-            
-            if (canvasId) {
-                // === FIX THE INFINITE LOOP HERE ===
-                // Save the ID to storage so the page reload realizes it already has an active workspace!
-                localStorage.setItem('activeCanvasId', canvasId);
-                activeCanvasId = canvasId; 
-
-                // Now it's perfectly safe to change search params
-                window.location.search = `?room=${canvasId}`;
-            } else {
-                console.error("Canvas was created, but no ID key could be read from:", data);
-                alert("Canvas created successfully, but your browser couldn't extract the unique room ID.");
-            }
-        }
-
-    } catch (error) {
-        console.error("Error encountered while communicating canvas creation route:", error);
-    }
-}
-// Loads a saved canvas dataUrl from the backend and renders it
-async function loadCanvas(canvasId, token) {
-    try {
-        const response = await fetch(`${API_BASE_URL}/canvas/load/${canvasId}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const data = await response.json();
-        if (response.ok && data.dataUrl) {
-            activeCanvasId = canvasId;
-            restoreState(data.dataUrl);
-        }
-    } catch (err) {
-        console.error('Failed to load canvas:', err);
-    }
-}
-
-function applyLoggedInState(name, token) {
-    authModalBtn.innerHTML = `<i class="fa-solid fa-user"></i> Hi, ${name}`;
-
-    // Restore the last active canvas if one was saved, otherwise create a new one
-    const savedCanvasId = localStorage.getItem('activeCanvasId');
-    if (savedCanvasId) {
-        loadCanvas(savedCanvasId, token);
-    } else {
-        createNewCanvas(token);
-    }
-}
-
-// ─── Login ─────────────────────────────────────────────────────────────────────
-
-loginForm.addEventListener('submit', async (e) => {
+loginForm.addEventListener('submit', async e => {
     e.preventDefault();
-    const email = document.getElementById('loginEmail').value;
+    const email    = document.getElementById('loginEmail').value;
     const password = document.getElementById('loginPassword').value;
-
-    try {
-        const response = await fetch(`${API_BASE_URL}/users/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-            const user = data.user;
-            const displayName = user.name || user.username || email.split('@')[0];
-
-            localStorage.setItem('token', data.token);
-            localStorage.setItem('user', JSON.stringify(user));
-
-            closeModal();
-            applyLoggedInState(displayName, data.token);
-        } else {
-            // Backend now always sends data.message
-            alert(data.message || 'Login failed. Please check your credentials.');
-        }
-    } catch (error) {
-        console.error('Login error:', error);
-        alert('Could not connect to the server. Is your backend running?');
-    }
+    const res  = await fetch(`${API_BASE_URL}/users/login`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+    if (res.ok) {
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        closeModal();
+        await applyLoggedInState(data.user.name || email.split('@')[0], data.token);
+    } else { alert(data.message || 'Login failed.'); }
 });
 
-// ─── Register ──────────────────────────────────────────────────────────────────
-
-registerForm.addEventListener('submit', async (e) => {
+registerForm.addEventListener('submit', async e => {
     e.preventDefault();
-    const name = document.getElementById('regName').value.trim();
-    const email = document.getElementById('regEmail').value.trim();
+    const name     = document.getElementById('regName').value.trim();
+    const email    = document.getElementById('regEmail').value.trim();
     const password = document.getElementById('regPassword').value;
-
-    if (!name || !email || !password) {
-        alert('All fields are required.');
-        return;
-    }
-
-    try {
-        const response = await fetch(`${API_BASE_URL}/users/register`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, email, password })
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-            alert('Account created! Please sign in.');
-            tabLogin.click();
-            // Pre-fill the email for convenience
-            document.getElementById('loginEmail').value = email;
-        } else {
-            alert(data.message || 'Registration failed.');
-        }
-    } catch (error) {
-        console.error('Register error:', error);
-        alert('Could not connect to the server. Is your backend running?');
-    }
+    if (!name || !email || !password) { alert('All fields are required.'); return; }
+    const res  = await fetch(`${API_BASE_URL}/users/register`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password })
+    });
+    const data = await res.json();
+    if (res.ok) {
+        alert('Account created! Please sign in.');
+        tabLogin.click();
+        document.getElementById('loginEmail').value = email;
+    } else { alert(data.message || 'Registration failed.'); }
 });
 
 // ─── Init ──────────────────────────────────────────────────────────────────────
-
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
     resizeCanvas();
-
-    const savedUser = localStorage.getItem('user');
-    const savedToken = localStorage.getItem('token');
-
-    if (savedUser && savedToken) {
-        const user = JSON.parse(savedUser);
-        const displayName = user.name || user.username || '';
-        applyLoggedInState(displayName || 'there', savedToken);
+    const user  = localStorage.getItem('user');
+    const token = getToken();
+    if (user && token) {
+        const { name, username } = JSON.parse(user);
+        await applyLoggedInState(name || username || 'there', token);
     }
 });
+
+window.addEventListener('resize', resizeCanvas);
+canvas.addEventListener('mousedown',  startDrawing);
+canvas.addEventListener('mousemove',  draw);
+canvas.addEventListener('mouseup',    stopDrawing);
+canvas.addEventListener('mouseout',   stopDrawing);
+canvas.addEventListener('touchstart', startDrawing);
+canvas.addEventListener('touchmove',  draw, { passive: false });
+canvas.addEventListener('touchend',   stopDrawing);
