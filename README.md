@@ -29,6 +29,6 @@ Socket.IO
 <img width="700" height="350" alt="Screenshot 2026-06-25 161632" src="https://github.com/user-attachments/assets/139c07fd-d20f-46cb-8d01-efe188b10be0" />
 <img width="700" height="350" alt="Screenshot 2026-06-25 161502" src="https://github.com/user-attachments/assets/b3e56f87-fe8a-4976-b7f3-de880e6f91df" />
 <img width="700" height="350" alt="Screenshot 2026-06-25 155650" src="https://github.com/user-attachments/assets/ac2f05ff-5ea0-4285-8e6d-c1985ba71e55" />
-<img width="700" height="350" alt="Screenshot 2026-06-25 155650" src="https://github.com/user-attachments/assets/ac2f05ff-5ea0-4285-8e6d-c1985ba71e55" />
+<img width="700" height="350" alt="Screenshot 2026-06-25 202349" src="https://github.com/user-attachments/assets/00f3467c-107c-404e-a822-6cf79a29f77f" />
 
 
