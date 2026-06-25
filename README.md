@@ -21,6 +21,9 @@ MongoDB
 JWT
 <h3>Real-Time Communication</h3>
 Socket.IO
+<h3>Deployment links</h3>
+Frontend= https://whiteboardkjr.vercel.app/
+Backend= https://whiteboard-kjr.onrender.com
 <h3>Screenshots</h3>
 <img width="800" height="400" alt="Screenshot 2026-06-25 155623" src="https://github.com/user-attachments/assets/c81e000e-1f1e-4cf3-8ed5-5b65e9033018" />
 <img width="800" height="400" alt="Screenshot 2026-06-25 161632" src="https://github.com/user-attachments/assets/139c07fd-d20f-46cb-8d01-efe188b10be0" />
