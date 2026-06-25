@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'https://whiteboard-kjr.onrender.com/api';
 
 // ─── Selectors ─────────────────────────────────────────────────────────────────
 const canvas         = document.getElementById('whiteboard');
@@ -255,7 +255,7 @@ saveCloudBtn.addEventListener('click', async () => {
 // ─── Socket ────────────────────────────────────────────────────────────────────
 function connectSocket(token, canvasId) {
     if (socket) socket.disconnect();
-    socket = io('http://localhost:5000', { extraHeaders: { Authorization: `Bearer ${token}` } });
+    socket = io('https://whiteboard-kjr.onrender.com', { extraHeaders: { Authorization: `Bearer ${token}` } });
     socket.on('connect',              () => socket.emit('joinCanvas', { canvasId }));
     socket.on('loadCanvas',           dataUrl => { if (dataUrl) restoreState(dataUrl); });
     socket.on('receiveDrawingUpdate', dataUrl => restoreState(dataUrl));
